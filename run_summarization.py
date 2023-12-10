@@ -29,48 +29,48 @@ from decode import BeamSearchDecoder
 import util
 from tensorflow.python import debug as tf_debug
 
-FLAGS = tf.compat.v1.flags.FLAGS
+FLAGS = tf.compat.v1.app.flags.FLAGS
 
 # Where to find data
-tf.compat.v1.flags.DEFINE_string('data_path', '', 'Path expression to tf.Example datafiles. Can include wildcards to access multiple datafiles.')
-tf.compat.v1.flags.DEFINE_string('vocab_path', '', 'Path expression to text vocabulary file.')
+tf.compat.v1.app.flags.DEFINE_string('data_path', '', 'Path expression to tf.compat.v1.Example datafiles. Can include wildcards to access multiple datafiles.')
+tf.compat.v1.app.flags.DEFINE_string('vocab_path', '', 'Path expression to text vocabulary file.')
 
 # Important settings
-tf.compat.v1.flags.DEFINE_string('mode', 'train', 'must be one of train/eval/decode')
-tf.compat.v1.flags.DEFINE_boolean('single_pass', False, 'For decode mode only. If True, run eval on the full dataset using a fixed checkpoint, i.e. take the current checkpoint, and use it to produce one summary for each example in the dataset, write the summaries to file and then get ROUGE scores for the whole dataset. If False (default), run concurrent decoding, i.e. repeatedly load latest checkpoint, use it to produce summaries for randomly-chosen examples and log the results to screen, indefinitely.')
+tf.compat.v1.app.flags.DEFINE_string('mode', 'train', 'must be one of train/eval/decode')
+tf.compat.v1.app.flags.DEFINE_boolean('single_pass', False, 'For decode mode only. If True, run eval on the full dataset using a fixed checkpoint, i.e. take the current checkpoint, and use it to produce one summary for each example in the dataset, write the summaries to file and then get ROUGE scores for the whole dataset. If False (default), run concurrent decoding, i.e. repeatedly load latest checkpoint, use it to produce summaries for randomly-chosen examples and log the results to screen, indefinitely.')
 
 # Where to save output
-tf.compat.v1.flags.DEFINE_string('log_root', '', 'Root directory for all logging.')
-tf.compat.v1.flags.DEFINE_string('exp_name', '', 'Name for experiment. Logs will be saved in a directory with this name, under log_root.')
+tf.compat.v1.app.flags.DEFINE_string('log_root', '', 'Root directory for all logging.')
+tf.compat.v1.app.flags.DEFINE_string('exp_name', '', 'Name for experiment. Logs will be saved in a directory with this name, under log_root.')
 
 # Hyperparameters
-tf.compat.v1.flags.DEFINE_integer('hidden_dim', 256, 'dimension of RNN hidden states')
-tf.compat.v1.flags.DEFINE_integer('emb_dim', 128, 'dimension of word embeddings')
-tf.compat.v1.flags.DEFINE_integer('batch_size', 16, 'minibatch size')
-tf.compat.v1.flags.DEFINE_integer('max_enc_steps', 400, 'max timesteps of encoder (max source text tokens)')
-tf.compat.v1.flags.DEFINE_integer('max_dec_steps', 100, 'max timesteps of decoder (max summary tokens)')
-tf.compat.v1.flags.DEFINE_integer('beam_size', 4, 'beam size for beam search decoding.')
-tf.compat.v1.flags.DEFINE_integer('min_dec_steps', 35, 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
-tf.compat.v1.flags.DEFINE_integer('vocab_size', 50000, 'Size of vocabulary. These will be read from the vocabulary file in order. If the vocabulary file contains fewer words than this number, or if this number is set to 0, will take all words in the vocabulary file.')
-tf.compat.v1.flags.DEFINE_float('lr', 0.15, 'learning rate')
-tf.compat.v1.flags.DEFINE_float('adagrad_init_acc', 0.1, 'initial accumulator value for Adagrad')
-tf.compat.v1.flags.DEFINE_float('rand_unif_init_mag', 0.02, 'magnitude for lstm cells random uniform inititalization')
-tf.compat.v1.flags.DEFINE_float('trunc_norm_init_std', 1e-4, 'std of trunc norm init, used for initializing everything else')
-tf.compat.v1.flags.DEFINE_float('max_grad_norm', 2.0, 'for gradient clipping')
+tf.compat.v1.app.flags.DEFINE_integer('hidden_dim', 256, 'dimension of RNN hidden states')
+tf.compat.v1.app.flags.DEFINE_integer('emb_dim', 128, 'dimension of word embeddings')
+tf.compat.v1.app.flags.DEFINE_integer('batch_size', 16, 'minibatch size')
+tf.compat.v1.app.flags.DEFINE_integer('max_enc_steps', 400, 'max timesteps of encoder (max source text tokens)')
+tf.compat.v1.app.flags.DEFINE_integer('max_dec_steps', 100, 'max timesteps of decoder (max summary tokens)')
+tf.compat.v1.app.flags.DEFINE_integer('beam_size', 4, 'beam size for beam search decoding.')
+tf.compat.v1.app.flags.DEFINE_integer('min_dec_steps', 35, 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
+tf.compat.v1.app.flags.DEFINE_integer('vocab_size', 50000, 'Size of vocabulary. These will be read from the vocabulary file in order. If the vocabulary file contains fewer words than this number, or if this number is set to 0, will take all words in the vocabulary file.')
+tf.compat.v1.app.flags.DEFINE_float('lr', 0.15, 'learning rate')
+tf.compat.v1.app.flags.DEFINE_float('adagrad_init_acc', 0.1, 'initial accumulator value for Adagrad')
+tf.compat.v1.app.flags.DEFINE_float('rand_unif_init_mag', 0.02, 'magnitude for lstm cells random uniform inititalization')
+tf.compat.v1.app.flags.DEFINE_float('trunc_norm_init_std', 1e-4, 'std of trunc norm init, used for initializing everything else')
+tf.compat.v1.app.flags.DEFINE_float('max_grad_norm', 2.0, 'for gradient clipping')
 
 # Pointer-generator or baseline model
-tf.compat.v1.flags.DEFINE_boolean('pointer_gen', True, 'If True, use pointer-generator model. If False, use baseline model.')
+tf.compat.v1.app.flags.DEFINE_boolean('pointer_gen', True, 'If True, use pointer-generator model. If False, use baseline model.')
 
 # Coverage hyperparameters
-tf.compat.v1.flags.DEFINE_boolean('coverage', False, 'Use coverage mechanism. Note, the experiments reported in the ACL paper train WITHOUT coverage until converged, and then train for a short phase WITH coverage afterwards. i.e. to reproduce the results in the ACL paper, turn this off for most of training then turn on for a short phase at the end.')
-tf.compat.v1.flags.DEFINE_float('cov_loss_wt', 1.0, 'Weight of coverage loss (lambda in the paper). If zero, then no incentive to minimize coverage loss.')
+tf.compat.v1.app.flags.DEFINE_boolean('coverage', False, 'Use coverage mechanism. Note, the experiments reported in the ACL paper train WITHOUT coverage until converged, and then train for a short phase WITH coverage afterwards. i.e. to reproduce the results in the ACL paper, turn this off for most of training then turn on for a short phase at the end.')
+tf.compat.v1.app.flags.DEFINE_float('cov_loss_wt', 1.0, 'Weight of coverage loss (lambda in the paper). If zero, then no incentive to minimize coverage loss.')
 
 # Utility flags, for restoring and changing checkpoints
-tf.compat.v1.flags.DEFINE_boolean('convert_to_coverage_model', False, 'Convert a non-coverage model to a coverage model. Turn this on and run in train mode. Your current training model will be copied to a new version (same name with _cov_init appended) that will be ready to run with coverage flag turned on, for the coverage training stage.')
-tf.compat.v1.flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the eval/ dir and save it in the train/ dir, ready to be used for further training. Useful for early stopping, or if your training checkpoint has become corrupted with e.g. NaN values.')
+tf.compat.v1.app.flags.DEFINE_boolean('convert_to_coverage_model', False, 'Convert a non-coverage model to a coverage model. Turn this on and run in train mode. Your current training model will be copied to a new version (same name with _cov_init appended) that will be ready to run with coverage flag turned on, for the coverage training stage.')
+tf.compat.v1.app.flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the eval/ dir and save it in the train/ dir, ready to be used for further training. Useful for early stopping, or if your training checkpoint has become corrupted with e.g. NaN values.')
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
-tf.compat.v1.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
+tf.compat.v1.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
 
 
 
@@ -93,7 +93,7 @@ def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.
   else:
     running_avg_loss = running_avg_loss * decay + (1 - decay) * loss
   running_avg_loss = min(running_avg_loss, 12)  # clip
-  loss_sum = tf.Summary()
+  loss_sum = tf.compat.v1.Summary()
   tag_name = 'running_avg_loss/decay=%f' % (decay)
   loss_sum.value.add(tag=tag_name, simple_value=running_avg_loss)
   summary_writer.add_summary(loss_sum, step)
@@ -107,12 +107,12 @@ def restore_best_model():
 
   # Initialize all vars in the model
   sess = tf.compat.v1.Session(config=util.get_config())
-  print ("Initializing all variables...")
+  print("Initializing all variables...")
   sess.run(tf.compat.v1.initialize_all_variables())
 
   # Restore the best model from eval dir
-  saver = tf.compat.v1.train.Saver([v for v in tf.all_variables() if "Adagrad" not in v.name])
-  print ("Restoring all non-adagrad variables from best model in eval dir...")
+  saver = tf.compat.v1.train.Saver([v for v in tf.compat.v1.global_variables() if "Adagrad" not in v.name])
+  print("Restoring all non-adagrad variables from best model in eval dir...")
   curr_ckpt = util.load_ckpt(saver, sess, "eval")
   print ("Restored %s." % curr_ckpt)
 
@@ -132,21 +132,21 @@ def convert_to_coverage_model():
 
   # initialize an entire coverage model from scratch
   sess = tf.compat.v1.Session(config=util.get_config())
-  print ("initializing everything...")
+  print("initializing everything...")
   sess.run(tf.compat.v1.global_variables_initializer())
 
   # load all non-coverage weights from checkpoint
-  saver = tf.compat.v1.train.Saver([v for v in tf.global_variables() if "coverage" not in v.name and "Adagrad" not in v.name])
-  print ("restoring non-coverage variables...")
+  saver = tf.compat.v1.train.Saver([v for v in tf.compat.v1.global_variables() if "coverage" not in v.name and "Adagrad" not in v.name])
+  print("restoring non-coverage variables...")
   curr_ckpt = util.load_ckpt(saver, sess)
-  print ("restored.")
+  print("restored.")
 
   # save this model and quit
   new_fname = curr_ckpt + '_cov_init'
-  print ("saving model to %s..." % (new_fname))
+  print("saving model to %s..." % (new_fname))
   new_saver = tf.compat.v1.train.Saver() # this one will save all variables that now exist
   new_saver.save(sess, new_fname)
-  print ("saved.")
+  print("saved.")
   exit()
 
 
@@ -223,7 +223,7 @@ def run_eval(model, batcher, vocab):
   sess = tf.compat.v1.Session(config=util.get_config())
   eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
   bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
-  summary_writer = tf.summary.FileWriter(eval_dir)
+  summary_writer = tf.compat.v1.summary.FileWriter(eval_dir)
   running_avg_loss = 0 # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
   best_loss = None  # will hold the best loss achieved so far
 
@@ -302,10 +302,10 @@ def main(unused_argv):
   # Create a batcher object that will create minibatches of data
   batcher = Batcher(FLAGS.data_path, vocab, hps, single_pass=FLAGS.single_pass)
 
-  tf.random.set_seed(111) # a seed value for randomness
+  tf.compat.v1.set_random_seed(111) # a seed value for randomness
 
   if hps.mode == 'train':
-    print ("creating model...")
+    print("creating model...")
     model = SummarizationModel(hps, vocab)
     setup_training(model, batcher)
   elif hps.mode == 'eval':
@@ -321,4 +321,4 @@ def main(unused_argv):
     raise ValueError("The 'mode' flag must be one of train/eval/decode")
 
 if __name__ == '__main__':
-   tf.compat.v1.app.run()
+  tf.compat.v1.app.run()

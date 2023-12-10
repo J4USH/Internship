@@ -23,9 +23,9 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from attention_decoder import attention_decoder
 from tensorboard.plugins import projector
-tf.compat.v1.disable_eager_execution()
 
-FLAGS = tf.compat.v1.flags.FLAGS
+
+FLAGS = tf.compat.v1.app.flags.FLAGS
 
 class SummarizationModel(object):
   """A class to represent a sequence-to-sequence model for text summarization. Supports both baseline mode, pointer-generator mode, and coverage"""
@@ -39,7 +39,6 @@ class SummarizationModel(object):
     hps = self._hps
 
     # encoder part
-    
     self._enc_batch = tf.compat.v1.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch')
     self._enc_lens = tf.compat.v1.placeholder(tf.int32, [hps.batch_size], name='enc_lens')
     self._enc_padding_mask = tf.compat.v1.placeholder(tf.float32, [hps.batch_size, None], name='enc_padding_mask')
@@ -90,9 +89,9 @@ class SummarizationModel(object):
         Each are LSTMStateTuples of shape ([batch_size,hidden_dim],[batch_size,hidden_dim])
     """
     with tf.compat.v1.variable_scope('encoder'):
-      cell_fw = tf.compat.v1.nn.rnn_cell.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init)
-      cell_bw = tf.compat.v1.nn.rnn_cell.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init)
-      (encoder_outputs, (fw_st, bw_st)) = tf.compat.v1.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_inputs, dtype=tf.float32, sequence_length=seq_len, swap_memory=True)
+      cell_fw = tf.compat.v1.nn.rnn_cell.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+      cell_bw = tf.compat.v1.nn.rnn_cell.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+      (encoder_outputs, (fw_st, bw_st)) = tf.compat.v1.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_inputs, dtype=tf.compat.v1.float32, sequence_length=seq_len, swap_memory=True)
       encoder_outputs = tf.concat(axis=2, values=encoder_outputs) # concatenate the forwards and backwards states
     return encoder_outputs, fw_st, bw_st
 
@@ -119,8 +118,8 @@ class SummarizationModel(object):
       # Apply linear layer
       old_c = tf.concat(axis=1, values=[fw_st.c, bw_st.c]) # Concatenation of fw and bw cell
       old_h = tf.concat(axis=1, values=[fw_st.h, bw_st.h]) # Concatenation of fw and bw state
-      new_c = tf.nn.relu(tf.matmul(old_c, w_reduce_c) + bias_reduce_c) # Get new cell from old cell
-      new_h = tf.nn.relu(tf.matmul(old_h, w_reduce_h) + bias_reduce_h) # Get new state from old state
+      new_c = tf.compat.v1.nn.relu(tf.compat.v1.matmul(old_c, w_reduce_c) + bias_reduce_c) # Get new cell from old cell
+      new_h = tf.compat.v1.nn.relu(tf.compat.v1.matmul(old_h, w_reduce_h) + bias_reduce_h) # Get new state from old state
       return tf.compat.v1.nn.rnn_cell.LSTMStateTuple(new_c, new_h) # Return new cell and state
 
 
@@ -134,11 +133,11 @@ class SummarizationModel(object):
       outputs: List of tensors; the outputs of the decoder
       out_state: The final state of the decoder
       attn_dists: A list of tensors; the attention distributions
-      p_gens: A list of tensors shape (batch_size, 1); the generation probabilities
+      p_gens: A list of scalar tensors; the generation probabilities
       coverage: A tensor, the current coverage vector
     """
     hps = self._hps
-    cell =  tf.compat.v1.nn.rnn_cell.LSTMCell(hps.hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
+    cell = tf.compat.v1.nn.rnn_cell.LSTMCell(hps.hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
 
     prev_coverage = self.prev_coverage if hps.mode=="decode" and hps.coverage else None # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's coverage vector each time
 
@@ -169,10 +168,10 @@ class SummarizationModel(object):
       # Project the values in the attention distributions onto the appropriate entries in the final distributions
       # This means that if a_i = 0.1 and the ith encoder word is w, and w has index 500 in the vocabulary, then we add 0.1 onto the 500th entry of the final distribution
       # This is done for each decoder timestep.
-      # This is fiddly; we use tf.scatter_nd to do the projection
+      # This is fiddly; we use tf.compat.v1.scatter_nd to do the projection
       batch_nums = tf.range(0, limit=self._hps.batch_size) # shape (batch_size)
-      batch_nums = tf.expand_dims(batch_nums, 1) # shape (batch_size, 1)
-      attn_len = tf.shape(self._enc_batch_extend_vocab)[1] # number of states we attend over
+      batch_nums = tf.compat.v1.expand_dims(batch_nums, 1) # shape (batch_size, 1)
+      attn_len = tf.compat.v1.shape(self._enc_batch_extend_vocab)[1] # number of states we attend over
       batch_nums = tf.tile(batch_nums, [1, attn_len]) # shape (batch_size, attn_len)
       indices = tf.stack( (batch_nums, self._enc_batch_extend_vocab), axis=2) # shape (batch_size, enc_t, 2)
       shape = [self._hps.batch_size, extended_vsize]
@@ -206,15 +205,15 @@ class SummarizationModel(object):
 
     with tf.compat.v1.variable_scope('seq2seq'):
       # Some initializers
-      self.rand_unif_init = tf.random_uniform_initializer(-hps.rand_unif_init_mag, hps.rand_unif_init_mag, seed=123)
-      self.trunc_norm_init = tf.random_normal_initializer(stddev=hps.trunc_norm_init_std)
+      self.rand_unif_init = tf.compat.v1.random_uniform_initializer(-hps.rand_unif_init_mag, hps.rand_unif_init_mag, seed=123)
+      self.trunc_norm_init = tf.compat.v1.truncated_normal_initializer(stddev=hps.trunc_norm_init_std)
 
       # Add embedding matrix (shared by the encoder and decoder inputs)
       with tf.compat.v1.variable_scope('embedding'):
         embedding = tf.compat.v1.get_variable('embedding', [vsize, hps.emb_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
         if hps.mode=="train": self._add_emb_vis(embedding) # add to tensorboard
-        emb_enc_inputs = tf.nn.embedding_lookup(embedding, self._enc_batch) # tensor with shape (batch_size, max_enc_steps, emb_size)
-        emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
+        emb_enc_inputs = tf.compat.v1.nn.embedding_lookup(embedding, self._enc_batch) # tensor with shape (batch_size, max_enc_steps, emb_size)
+        emb_dec_inputs = [tf.compat.v1.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
 
       # Add the encoder.
       enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens)
@@ -230,7 +229,7 @@ class SummarizationModel(object):
       # Add the output projection to obtain the vocabulary distribution
       with tf.compat.v1.variable_scope('output_projection'):
         w = tf.compat.v1.get_variable('w', [hps.hidden_dim, vsize], dtype=tf.float32, initializer=self.trunc_norm_init)
-        w_t = tf.transpose(w)
+        w_t = tf.compat.v1.transpose(w)
         v = tf.compat.v1.get_variable('v', [vsize], dtype=tf.float32, initializer=self.trunc_norm_init)
         vocab_scores = [] # vocab_scores is the vocabulary distribution before applying softmax. Each entry on the list corresponds to one decoder step
         for i,output in enumerate(decoder_outputs):
@@ -254,14 +253,14 @@ class SummarizationModel(object):
         with tf.compat.v1.variable_scope('loss'):
           if FLAGS.pointer_gen:
             # Calculate the loss per step
-            # This is fiddly; we use tf.gather_nd to pick out the probabilities of the gold target words
+            # This is fiddly; we use tf.compat.v1.gather_nd to pick out the probabilities of the gold target words
             loss_per_step = [] # will be list length max_dec_steps containing shape (batch_size)
             batch_nums = tf.range(0, limit=hps.batch_size) # shape (batch_size)
             for dec_step, dist in enumerate(final_dists):
               targets = self._target_batch[:,dec_step] # The indices of the target words. shape (batch_size)
               indices = tf.stack( (batch_nums, targets), axis=1) # shape (batch_size, 2)
-              gold_probs = tf.gather_nd(dist, indices) # shape (batch_size). prob of correct words on this step
-              losses = -tf.math.log(gold_probs)
+              gold_probs = tf.compat.v1.gather_nd(dist, indices) # shape (batch_size). prob of correct words on this step
+              losses = -tf.compat.v1.log(gold_probs)
               loss_per_step.append(losses)
 
             # Apply dec_padding_mask and get loss
@@ -270,22 +269,22 @@ class SummarizationModel(object):
           else: # baseline model
             self._loss = tfa.seq2seq.sequence_loss(tf.stack(vocab_scores, axis=1), self._target_batch, self._dec_padding_mask) # this applies softmax internally
 
-          tf.summary.scalar('loss', self._loss)
+          tf.compat.v1.summary.scalar('loss', self._loss)
 
           # Calculate coverage loss from the attention distributions
           if hps.coverage:
             with tf.compat.v1.variable_scope('coverage_loss'):
               self._coverage_loss = _coverage_loss(self.attn_dists, self._dec_padding_mask)
-              tf.summary.scalar('coverage_loss', self._coverage_loss)
+              tf.compat.v1.summary.scalar('coverage_loss', self._coverage_loss)
             self._total_loss = self._loss + hps.cov_loss_wt * self._coverage_loss
-            tf.summary.scalar('total_loss', self._total_loss)
+            tf.compat.v1.summary.scalar('total_loss', self._total_loss)
 
     if hps.mode == "decode":
       # We run decode beam search mode one decoder step at a time
       assert len(final_dists)==1 # final_dists is a singleton list containing shape (batch_size, extended_vsize)
       final_dists = final_dists[0]
-      topk_probs, self._topk_ids = tf.nn.top_k(final_dists, hps.batch_size*2) # take the k largest probs. note batch_size=beam_size in decode mode
-      self._topk_log_probs = tf.log(topk_probs)
+      topk_probs, self._topk_ids = tf.compat.v1.nn.top_k(final_dists, hps.batch_size*2) # take the k largest probs. note batch_size=beam_size in decode mode
+      self._topk_log_probs = tf.compat.v1.log(topk_probs)
 
 
   def _add_train_op(self):
@@ -293,18 +292,18 @@ class SummarizationModel(object):
     # Take gradients of the trainable variables w.r.t. the loss function to minimize
     loss_to_minimize = self._total_loss if self._hps.coverage else self._loss
     tvars = tf.compat.v1.trainable_variables()
-    gradients = tf.gradients(loss_to_minimize, tvars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
+    gradients = tf.compat.v1.gradients(loss_to_minimize, tvars, aggregation_method=tf.compat.v1.AggregationMethod.EXPERIMENTAL_TREE)
 
     # Clip the gradients
-    with tf.device("/gpu:0"):
+    with tf.compat.v1.DeviceSpec(device_type="GPU", device_index=0):
       grads, global_norm = tf.clip_by_global_norm(gradients, self._hps.max_grad_norm)
 
     # Add a summary
-    tf.summary.scalar('global_norm', global_norm)
+    tf.compat.v1.summary.scalar('global_norm', global_norm)
 
     # Apply adagrad optimizer
     optimizer = tf.compat.v1.train.AdagradOptimizer(self._hps.lr, initial_accumulator_value=self._hps.adagrad_init_acc)
-    with tf.device("/gpu:0"):
+    with tf.compat.v1.DeviceSpec(device_type="GPU", device_index=0):
       self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=self.global_step, name='train_step')
 
 
@@ -313,9 +312,9 @@ class SummarizationModel(object):
     tf.compat.v1.logging.info('Building graph...')
     t0 = time.time()
     self._add_placeholders()
-    with tf.device("/gpu:0"):
+    with tf.compat.v1.DeviceSpec(device_type="GPU", device_index=0):
       self._add_seq2seq()
-    self.global_step = tf.Variable(0, name='global_step', trainable=False)
+    self.global_step = tf.compat.v1.Variable(0, name='global_step', trainable=False)
     if self._hps.mode == 'train':
       self._add_train_op()
     self._summaries = tf.compat.v1.summary.merge_all()
@@ -395,7 +394,7 @@ class SummarizationModel(object):
     hiddens = [np.expand_dims(state.h, axis=0) for state in dec_init_states]
     new_c = np.concatenate(cells, axis=0)  # shape [batch_size,hidden_dim]
     new_h = np.concatenate(hiddens, axis=0)  # shape [batch_size,hidden_dim]
-    new_dec_in_state = tf.compat.v1.nn.rnn_cell.LSTMStateTuple(new_c, new_h)
+    new_dec_in_state = tf.compat.v1.contrib.rnn.LSTMStateTuple(new_c, new_h)
 
     feed = {
         self._enc_states: enc_states,
@@ -457,10 +456,10 @@ def _mask_and_avg(values, padding_mask):
     a scalar
   """
 
-  dec_lens = tf.reduce_sum(padding_mask, axis=1) # shape batch_size. float32
+  dec_lens = tf.compat.v1.reduce_sum(padding_mask, axis=1) # shape batch_size. float32
   values_per_step = [v * padding_mask[:,dec_step] for dec_step,v in enumerate(values)]
   values_per_ex = sum(values_per_step)/dec_lens # shape (batch_size); normalized value for each batch member
-  return tf.reduce_mean(values_per_ex) # overall average
+  return tf.compat.v1.reduce_mean(values_per_ex) # overall average
 
 
 def _coverage_loss(attn_dists, padding_mask):
@@ -473,10 +472,10 @@ def _coverage_loss(attn_dists, padding_mask):
   Returns:
     coverage_loss: scalar
   """
-  coverage = tf.zeros_like(attn_dists[0]) # shape (batch_size, attn_length). Initial coverage is zero.
+  coverage = tf.compat.v1.zeros_like(attn_dists[0]) # shape (batch_size, attn_length). Initial coverage is zero.
   covlosses = [] # Coverage loss per decoder timestep. Will be list length max_dec_steps containing shape (batch_size).
   for a in attn_dists:
-    covloss = tf.reduce_sum(tf.minimum(a, coverage), [1]) # calculate the coverage loss for this step
+    covloss = tf.compat.v1.reduce_sum(tf.compat.v1.minimum(a, coverage), [1]) # calculate the coverage loss for this step
     covlosses.append(covloss)
     coverage += a # update the coverage vector
   coverage_loss = _mask_and_avg(covlosses, padding_mask)
