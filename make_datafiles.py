@@ -140,7 +140,7 @@ def write_to_bin(out_file):
   with open(out_file, 'wb') as writer:
     for idx,s in enumerate(story_fnames):
       if idx % 1000 == 0:
-        print( "Writing story %i of %i; %.2f percent done" % (idx, num_stories, float(idx)*100.0/float(num_stories)))
+        print( "Writing story %i of %i; %.2f percent done" % (idx, len(story_fnames), float(idx)*100.0/float(len(story_fnames))))
 
       # Look in the tokenized story dirs to find the .story file corresponding to this url
       if os.path.isfile(os.path.join(tokenized_stories_dir, s)):
