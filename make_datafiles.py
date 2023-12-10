@@ -15,17 +15,12 @@ END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_dou
 # We use these to separate the summary sentences in the .bin datafiles
 SENTENCE_START = '<s>'
 SENTENCE_END = '</s>'
-
-
-
-
-
 CHUNK_SIZE = 1000 # num examples per chunk, for the chunked data
-
+VOCAB_SIZE = 200000
 
 def chunk_file(set_name):
+  # in_file = 'finished_files/%s.bin' % set_name 
   in_file = os.path.join(finished_files_dir, '%s.bin' % set_name)
-
   reader = open(in_file, "rb")
   chunk = 0
   finished = False
@@ -49,25 +44,26 @@ def chunk_all():
   if not os.path.isdir(chunks_dir):
     os.mkdir(chunks_dir)
   # Chunk the data
-  for set_name in ['test']:
-    print ("Splitting %s data into chunks..." % set_name)
+  # for set_name in ['train', 'val', 'test']:
+  for set_name in ['train']:
+    print("Splitting %s data into chunks..." % set_name)
     chunk_file(set_name)
-  print ("Saved chunked data in %s" % chunks_dir)
+  print("Saved chunked data in %s" % chunks_dir)
 
 
 def tokenize_stories(stories_dir, tokenized_stories_dir):
   """Maps a whole directory of .story files to a tokenized version using Stanford CoreNLP Tokenizer"""
-  print ("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
+  print("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
   stories = os.listdir(stories_dir)
   # make IO list file
-  print ("Making list of files to tokenize...")
+  print("Making list of files to tokenize...")
   with open("mapping.txt", "w") as f:
     for s in stories:
       f.write("%s \t %s\n" % (os.path.join(stories_dir, s), os.path.join(tokenized_stories_dir, s)))
-  command = ['java','-cp', 'stanford-corenlp-full-2018-02-27/stanford-corenlp-3.9.1.jar', 'edu.stanford.nlp.process.PTBTokenizer', '-ioFileList', '-preserveLines', 'mapping.txt']
-  print ("Tokenizing %i files in %s and saving in %s..." % (len(stories), stories_dir, tokenized_stories_dir))
+  command = ['java', '-cp', 'stanford-corenlp-full-2018-02-27/stanford-corenlp-3.9.1.jar', 'edu.stanford.nlp.process.PTBTokenizer', '-ioFileList', '-preserveLines', 'mapping.txt']
+  print("Tokenizing %i files in %s and saving in %s..." % (len(stories), stories_dir, tokenized_stories_dir))
   subprocess.call(command)
-  print ("Stanford CoreNLP Tokenizer has finished.")
+  print("Stanford CoreNLP Tokenizer has finished.")
   os.remove("mapping.txt")
 
   # Check that the tokenized stories directory contains the same number of files as the original directory
@@ -75,7 +71,7 @@ def tokenize_stories(stories_dir, tokenized_stories_dir):
   num_tokenized = len(os.listdir(tokenized_stories_dir))
   if num_orig != num_tokenized:
     raise Exception("The tokenized stories directory %s contains %i files, but it should contain the same number as %s (which has %i files). Was there an error during tokenization?" % (tokenized_stories_dir, num_tokenized, stories_dir, num_orig))
-  print( "Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir))
+  print("Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir))
 
 
 def read_text_file(text_file):
@@ -84,9 +80,6 @@ def read_text_file(text_file):
     for line in f:
       lines.append(line.strip())
   return lines
-
-
-
 
 
 def fix_missing_period(line):
@@ -130,17 +123,20 @@ def get_art_abs(story_file):
   return article, abstract
 
 
-def write_to_bin(out_file):
- 
+def write_to_bin(out_file,makevocab = False):
+  # story_fnames = [name for name in os.listdir(tokenized_stories_dir) if os.path.isfile(tokenized_stories_dir+'\\'+name) ]
   story_fnames = [name for name in os.listdir(tokenized_stories_dir)]
-
-
-
+  num_stories = len(story_fnames)
+  # print(story_fnames)
+  # for idx,s in enumerate(story_fnames):
+  #   print(idx,s)
+  if makevocab:
+    vocab_counter = collections.Counter()
 
   with open(out_file, 'wb') as writer:
     for idx,s in enumerate(story_fnames):
       if idx % 1000 == 0:
-        print( "Writing story %i of %i; %.2f percent done" % (idx, len(story_fnames), float(idx)*100.0/float(len(story_fnames))))
+        print("Writing story %i of %i; %.2f percent done" % (idx, num_stories, float(idx)*100.0/float(num_stories)))
 
       # Look in the tokenized story dirs to find the .story file corresponding to this url
       if os.path.isfile(os.path.join(tokenized_stories_dir, s)):
@@ -148,15 +144,12 @@ def write_to_bin(out_file):
         print(story_file)
 
       else:
-        print ("Error: Couldn't find tokenized story file %s in either tokenized story directories %s and %s. Was there an error during tokenization?" % (s, cnn_tokenized_stories_dir, dm_tokenized_stories_dir))
-        # Check again if tokenized stories directories contain correct number of files
-        print ("Checking that the tokenized stories directories %s and %s contain correct number of files..." % (cnn_tokenized_stories_dir, dm_tokenized_stories_dir))
-        check_num_stories(cnn_tokenized_stories_dir, num_expected_cnn_stories)
-        check_num_stories(dm_tokenized_stories_dir, num_expected_dm_stories)
-        raise Exception("Tokenized stories directories %s and %s contain correct number of files but story file %s found in neither." % (cnn_tokenized_stories_dir, dm_tokenized_stories_dir, s))
+        print('Error: no data.')
 
-      # Get the strings to write to .bin file
+  #     # Get the strings to write to .bin file
       article, abstract = get_art_abs(story_file)
+      # print('article:', article)
+      # print('abstract:', abstract)
 
       # Write to tf.Example
       tf_example = example_pb2.Example()
@@ -167,12 +160,29 @@ def write_to_bin(out_file):
       writer.write(struct.pack('q', str_len))
       writer.write(struct.pack('%ds' % str_len, tf_example_str))
 
-    print("Finished writing file %s\n" % out_file)
+      if makevocab:
+        art_tokens = article.split(' ')
+        abs_tokens = abstract.split(' ')
+        abs_tokens = [t for t in abs_tokens if t not in [SENTENCE_START, SENTENCE_END]] # remove these tags from vocab
+        tokens = art_tokens + abs_tokens
+        tokens = [t.strip() for t in tokens] # strip
+        tokens = [t for t in tokens if t!=""] # remove empty
+        vocab_counter.update(tokens)
+
+  print("Finished writing file %s\n" % out_file)
+  
+  # write vocab to file
+  if makevocab:
+    print("Writing vocab file...")
+    with open(os.path.join(finished_files_dir, "vocab"), 'w') as writer:
+      for word, count in vocab_counter.most_common(VOCAB_SIZE):
+        writer.write(word + ' ' + str(count) + '\n')
+    print("Finished writing vocab file")
+
 
 if __name__ == '__main__':
   if len(sys.argv) != 3:
     print("USAGE: python make_datafiles.py <stories_dir> <out_dir>")
-    
     sys.exit()
   stories_dir = sys.argv[1]
   out_dir = sys.argv[2]
@@ -183,6 +193,7 @@ if __name__ == '__main__':
   finished_files_dir = os.path.join(out_dir, "finished_files") 
   
   chunks_dir = os.path.join(finished_files_dir, "chunked")
+  
   # Create some new directories
   if not os.path.exists(tokenized_stories_dir): os.makedirs(tokenized_stories_dir)
   if not os.path.exists(finished_files_dir): os.makedirs(finished_files_dir)
@@ -191,7 +202,7 @@ if __name__ == '__main__':
   tokenize_stories(stories_dir, tokenized_stories_dir)
 
   # Read the tokenized stories, do a little postprocessing then write to bin files
-  write_to_bin(os.path.join(finished_files_dir, "test.bin"))
+  write_to_bin(os.path.join(finished_files_dir, "train.bin"),makevocab=True)
 
-  # Chunk the data. This splits each of train.bin, val.bin and test.bin into smaller chunks, each containing e.g. 1000 examples, and saves them in finished_files/chunks
+  # # Chunk the data. This splits each of train.bin, val.bin and test.bin into smaller chunks, each containing e.g. 1000 examples, and saves them in finished_files/chunks
   chunk_all()
