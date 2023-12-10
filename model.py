@@ -20,6 +20,7 @@ import os
 import time
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 from attention_decoder import attention_decoder
 from tensorboard.plugins import projector
 tf.compat.v1.disable_eager_execution()
@@ -120,7 +121,7 @@ class SummarizationModel(object):
       old_h = tf.concat(axis=1, values=[fw_st.h, bw_st.h]) # Concatenation of fw and bw state
       new_c = tf.nn.relu(tf.matmul(old_c, w_reduce_c) + bias_reduce_c) # Get new cell from old cell
       new_h = tf.nn.relu(tf.matmul(old_h, w_reduce_h) + bias_reduce_h) # Get new state from old state
-      return tf.contrib.rnn.LSTMStateTuple(new_c, new_h) # Return new cell and state
+      return tf.compat.v1.nn.rnn_cell.LSTMStateTuple(new_c, new_h) # Return new cell and state
 
 
   def _add_decoder(self, inputs):
@@ -267,7 +268,7 @@ class SummarizationModel(object):
             self._loss = _mask_and_avg(loss_per_step, self._dec_padding_mask)
 
           else: # baseline model
-            self._loss = tf.contrib.seq2seq.sequence_loss(tf.stack(vocab_scores, axis=1), self._target_batch, self._dec_padding_mask) # this applies softmax internally
+            self._loss = tfa.seq2seq.sequence_loss(tf.stack(vocab_scores, axis=1), self._target_batch, self._dec_padding_mask) # this applies softmax internally
 
           tf.summary.scalar('loss', self._loss)
 
@@ -362,7 +363,7 @@ class SummarizationModel(object):
 
     # dec_in_state is LSTMStateTuple shape ([batch_size,hidden_dim],[batch_size,hidden_dim])
     # Given that the batch is a single example repeated, dec_in_state is identical across the batch so we just take the top row.
-    dec_in_state = tf.contrib.rnn.LSTMStateTuple(dec_in_state.c[0], dec_in_state.h[0])
+    dec_in_state = tf.compat.v1.nn.rnn_cell.LSTMStateTuple(dec_in_state.c[0], dec_in_state.h[0])
     return enc_states, dec_in_state
 
 
@@ -394,7 +395,7 @@ class SummarizationModel(object):
     hiddens = [np.expand_dims(state.h, axis=0) for state in dec_init_states]
     new_c = np.concatenate(cells, axis=0)  # shape [batch_size,hidden_dim]
     new_h = np.concatenate(hiddens, axis=0)  # shape [batch_size,hidden_dim]
-    new_dec_in_state = tf.contrib.rnn.LSTMStateTuple(new_c, new_h)
+    new_dec_in_state = tf.compat.v1.nn.rnn_cell.LSTMStateTuple(new_c, new_h)
 
     feed = {
         self._enc_states: enc_states,
@@ -422,7 +423,7 @@ class SummarizationModel(object):
     results = sess.run(to_return, feed_dict=feed) # run the decoder step
 
     # Convert results['states'] (a single LSTMStateTuple) into a list of LSTMStateTuple -- one for each hypothesis
-    new_states = [tf.contrib.rnn.LSTMStateTuple(results['states'].c[i, :], results['states'].h[i, :]) for i in xrange(beam_size)]
+    new_states = [tf.compat.v1.nn.rnn_cell.LSTMStateTuple(results['states'].c[i, :], results['states'].h[i, :]) for i in xrange(beam_size)]
 
     # Convert singleton list containing a tensor to a list of k arrays
     assert len(results['attn_dists'])==1
