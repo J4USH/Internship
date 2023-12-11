@@ -24,7 +24,7 @@ import tensorflow_addons as tfa
 from attention_decoder import attention_decoder
 from tensorboard.plugins import projector
 
-
+tf.compat.v1.disable_eager_execution()
 FLAGS = tf.compat.v1.app.flags.FLAGS
 
 class SummarizationModel(object):
