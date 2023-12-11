@@ -295,7 +295,7 @@ class SummarizationModel(object):
     gradients = tf.compat.v1.gradients(loss_to_minimize, tvars, aggregation_method=tf.compat.v1.AggregationMethod.EXPERIMENTAL_TREE)
 
     # Clip the gradients
-    with tf.compat.v1.DeviceSpec(device_type="GPU", device_index=0):
+    with tf.device('/GPU:0'):
       grads, global_norm = tf.clip_by_global_norm(gradients, self._hps.max_grad_norm)
 
     # Add a summary
