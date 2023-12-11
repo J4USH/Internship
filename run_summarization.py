@@ -250,7 +250,7 @@ def run_eval(model, batcher, vocab):
     summary_writer.add_summary(summaries, train_step)
 
     # calculate running avg loss
-    running_avg_loss = calc_running_avg_loss(np.asscalar(loss), running_avg_loss, summary_writer, train_step)
+    running_avg_loss = calc_running_avg_loss(loss.item(), running_avg_loss, summary_writer, train_step)
 
     # If running_avg_loss is best so far, save this checkpoint (early stopping).
     # These checkpoints will appear as bestmodel-<iteration_number> in the eval dir
