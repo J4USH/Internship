@@ -394,7 +394,7 @@ class SummarizationModel(object):
     hiddens = [np.expand_dims(state.h, axis=0) for state in dec_init_states]
     new_c = np.concatenate(cells, axis=0)  # shape [batch_size,hidden_dim]
     new_h = np.concatenate(hiddens, axis=0)  # shape [batch_size,hidden_dim]
-    new_dec_in_state = tf.compat.v1.contrib.rnn.LSTMStateTuple(new_c, new_h)
+    new_dec_in_state = tf.compat.v1.nn.rnn_cell.LSTMStateTuple(new_c, new_h)
 
     feed = {
         self._enc_states: enc_states,
