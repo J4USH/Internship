@@ -78,9 +78,11 @@ class BeamSearchDecoder(object):
     """Decode examples until data is exhausted (if FLAGS.single_pass) and return, or decode indefinitely, loading latest checkpoint at regular intervals"""
     t0 = time.time()
     counter = 0
+    c=0
     while True:
+      c=c+1
       batch = self._batcher.next_batch()  # 1 example repeated across batch
-      if batch is None: # finished decoding dataset in single_pass mode
+      if batch is None or c==100: # finished decoding dataset in single_pass mode
         assert FLAGS.single_pass, "Dataset exhausted, but we are not in single_pass mode"
         tf.compat.v1.logging.info("Decoder has finished reading dataset for single_pass.")
         tf.compat.v1.logging.info("Output has been saved in %s and %s. Now starting ROUGE eval...", self._rouge_ref_dir, self._rouge_dec_dir)
